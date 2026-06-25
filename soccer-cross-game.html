@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Cross & Finish</title>
+<style>
+  :root{ --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select:none; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:#05070a; overflow:hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    touch-action: none;
+  }
+  #stage{
+    position:relative; width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #frame{
+    position:relative;
+    width:390px; height:844px;
+    max-width:100vw; max-height:100vh;
+    background:#000;
+    overflow:hidden;
+    box-shadow:0 0 60px rgba(0,0,0,0.8);
+  }
+  canvas#game{
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    filter: sepia(0.08) saturate(1.25) contrast(1.05);
+  }
+  #vignette{
+    position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%);
+  }
+  #flare{
+    position:absolute; inset:0; pointer-events:none; mix-blend-mode: screen;
+    background: radial-gradient(circle at 70% 12%, rgba(255,250,210,0.35), rgba(255,250,210,0) 30%);
+    opacity:0.8;
+  }
+  #flash{
+    position:absolute; inset:0; pointer-events:none;
+    background:#fff; opacity:0; transition:opacity .05s linear;
+    z-index:50;
+  }
+  .screen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; color:#fff; padding:24px;
+    padding-top: calc(24px + var(--safe-top));
+    padding-bottom: calc(24px + var(--safe-bottom));
+    z-index:30;
+    background: linear-gradient(180deg, rgba(4,8,16,0.92), rgba(2,4,8,0.97));
+  }
+  .hidden{ display:none !important; }
+  h1.title{
+    font-size:34px; font-weight:800; letter-spacing:1px; margin:0 0 4px;
+    text-shadow:0 2px 12px rgba(255,200,80,0.4);
+  }
+  .badge{
+    width:84px; height:84px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #ffe27a, #d99a1f 60%, #7a5a08);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5), inset 0 0 12px rgba(255,255,255,0.3);
+    margin-bottom:14px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:36px;
+  }
+  .sub{ opacity:0.75; font-size:14px; margin-bottom:22px; }
+  input#nameInput{
+    width:80%; max-width:280px; padding:12px 14px; font-size:16px;
+    border-radius:10px; border:1px solid rgba(255,255,255,0.25);
+    background:rgba(255,255,255,0.08); color:#fff; text-align:center;
+    margin-bottom:18px; outline:none;
+  }
+  input#nameInput::placeholder{ color:rgba(255,255,255,0.4); }
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    padding:14px 36px; font-size:18px; font-weight:700;
+    border-radius:30px; color:#1b1300;
+    background:linear-gradient(180deg,#ffe27a,#e8a93b);
+    box-shadow:0 6px 0 #8a5e10, 0 10px 18px rgba(0,0,0,0.4);
+    letter-spacing:0.5px;
+    transition: transform .08s ease;
+  }
+  .btn:active{ transform: translateY(4px); box-shadow:0 2px 0 #8a5e10; }
+  .btn.secondary{
+    background:linear-gradient(180deg,#3a4150,#222732);
+    color:#fff; box-shadow:0 6px 0 #10131a, 0 10px 18px rgba(0,0,0,0.4);
+  }
+  .kit-row{ display:flex; gap:10px; margin-bottom:20px; }
+  .kit-swatch{
+    width:34px; height:34px; border-radius:50%; border:2px solid rgba(255,255,255,0.4);
+    cursor:pointer;
+  }
+  .kit-swatch.selected{ border-color:#ffe27a; box-shadow:0 0 0 3px rgba(255,226,122,0.4); }
+
+  #hud{
+    position:absolute; top:0; left:0; right:0; z-index:20;
+    padding: calc(10px + var(--safe-top)) 14px 10px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:13px; font-weight:700; color:#fff;
+    text-shadow:0 1px 4px rgba(0,0,0,0.8);
+    background: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0));
+    pointer-events:none;
+  }
+  #hud .stat{ display:flex; flex-direction:column; align-items:center; min-width:60px; }
+  #hud .stat .v{ font-size:18px; }
+  #hud .stat .l{ font-size:9px; opacity:0.7; letter-spacing:1px; }
+
+  #tierCallout{
+    position:absolute; top:38%; left:0; right:0; text-align:center; z-index:40;
+    font-size:30px; font-weight:900; color:#fff; letter-spacing:1px;
+    text-shadow:0 0 12px rgba(255,200,80,0.9), 0 4px 10px rgba(0,0,0,0.6);
+    opacity:0; pointer-events:none;
+  }
+
+  #chargeWrap{
+    position:absolute; left:0; right:0; bottom:0; z-index:25;
+    padding: 0 18px calc(18px + var(--safe-bottom));
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  #barTrack{
+    position:relative; width:100%; max-width:340px; height:22px;
+    background:rgba(255,255,255,0.12); border-radius:12px;
+    border:1px solid rgba(255,255,255,0.25);
+    overflow:hidden;
+  }
+  #barFill{
+    position:absolute; left:0; top:0; bottom:0; width:0%;
+    background:linear-gradient(90deg,#7d8893,#e8d23b,#e8a93b,#e25b3a);
+    border-radius:12px 0 0 12px;
+  }
+  #perfectZone{
+    position:absolute; right:0; top:0; bottom:0; width:5%;
+    background:linear-gradient(90deg, rgba(255,226,122,0.4), rgba(255,226,122,0.9));
+    box-shadow: 0 0 10px rgba(255,226,122,0.8) inset;
+  }
+  #barLabel{ color:#fff; font-size:12px; font-weight:700; opacity:0.8; letter-spacing:1px; }
+  .shake{ animation: shakeKey 0.18s linear infinite; }
+  @keyframes shakeKey{
+    0%{ transform: translate(0,0); } 25%{ transform: translate(1px,-1px); }
+    50%{ transform: translate(-1px,1px); } 75%{ transform: translate(1px,1px); } 100%{ transform: translate(0,0); }
+  }
+  #touchCatcher{
+    position:absolute; inset:0; z-index:15;
+  }
+  #resultBox{
+    position:absolute; inset:0; z-index:60; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; color:#fff;
+    background: rgba(2,4,8,0.55); opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  #resultBox.show{ opacity:1; pointer-events:all; }
+  #resultBig{ font-size:46px; font-weight:900; letter-spacing:1px; margin-bottom:6px; }
+  #resultSmall{ font-size:15px; opacity:0.85; margin-bottom:18px; }
+  .ratingTag{
+    font-size:12px; letter-spacing:2px; padding:6px 14px; border-radius:20px;
+    background:rgba(255,255,255,0.12); margin-bottom:14px;
+  }
+  #countdownNum{
+    font-size:90px; font-weight:900; color:#fff; text-shadow:0 0 30px rgba(255,226,122,0.8);
+  }
+  #crossLabel{ font-size:16px; letter-spacing:2px; opacity:0.85; margin-top:8px; text-transform:uppercase; }
+  .scorecard{
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15);
+    border-radius:14px; padding:16px 22px; margin-bottom:18px; min-width:240px;
+  }
+  .scorecard .row{ display:flex; justify-content:space-between; font-size:14px; padding:4px 0; }
+  .scorecard .row b{ font-size:16px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="frame">
+    <canvas id="game"></canvas>
+    <div id="vignette"></div>
+    <div id="flare"></div>
+    <div id="flash"></div>
+
+    <div id="hud" class="hidden">
+      <div class="stat"><div class="v" id="hudPlayer">PLAYER</div><div class="l">PLAYER</div></div>
+      <div class="stat"><div class="v" id="hudRound">1/5</div><div class="l">ROUND</div></div>
+      <div class="stat"><div class="v" id="hudScore">0</div><div class="l">SCORE</div></div>
+    </div>
+
+    <div id="tierCallout"></div>
+
+    <div id="touchCatcher" class="hidden"></div>
+
+    <div id="chargeWrap" class="hidden">
+      <div id="barLabel">HOLD TO CHARGE SHOT</div>
+      <div id="barTrack">
+        <div id="perfectZone"></div>
+        <div id="barFill"></div>
+      </div>
+    </div>
+
+    <div id="resultBox">
+      <div id="resultBig"></div>
+      <div id="resultSmall"></div>
+    </div>
+
+    <!-- Start Screen -->
+    <div class="screen" id="screenStart">
+      <div class="badge">⚽</div>
+      <h1 class="title">CROSS &amp; FINISH</h1>
+      <div class="sub">Time your shot. Beat the keeper. Become a legend.</div>
+      <input id="nameInput" type="text" maxlength="14" placeholder="Enter player name">
+      <div class="kit-row" id="kitRow"></div>
+      <button class="btn" id="kickOffBtn">KICK OFF</button>
+    </div>
+
+    <!-- Round Screen -->
+    <div class="screen hidden" id="screenRound">
+      <div id="countdownNum">3</div>
+      <div id="crossLabel">Whipped cross — left wing</div>
+    </div>
+
+    <!-- Score Screen -->
+    <div class="screen hidden" id="screenScore">
+      <h1 class="title">FULL TIME</h1>
+      <div class="ratingTag" id="ratingTag">AMATEUR</div>
+      <div class="scorecard">
+        <div class="row"><span>Total Score</span><b id="finalScore">0</b></div>
+        <div class="row"><span>Goals Scored</span><b id="finalGoals">0/5</b></div>
+        <div class="row"><span>Best Shot</span><b id="finalBest">-</b></div>
+        <div class="row"><span>High Score</span><b id="finalHigh">0</b></div>
+      </div>
+      <button class="btn" id="shareBtn">SHARE SCORE</button>
+      <button class="btn secondary" id="playAgainBtn" style="margin-top:10px;">PLAY AGAIN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- Setup / Canvas ----------------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const LOGICAL_W = 390, LOGICAL_H = 844;
+
+  function resizeCanvas(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = LOGICAL_W * dpr;
+    canvas.height = LOGICAL_H * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // ---------------- Audio Engine ----------------
+  const AudioEngine = (function(){
+    let actx = null;
+    function ensure(){
+      if(!actx){
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if(actx.state === 'suspended') actx.resume();
+      return actx;
+    }
+    function tone(freq, dur, type='sine', vol=0.2, delay=0, freqEnd=null){
+      const ac = ensure();
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
+      if(freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, ac.currentTime + delay + dur);
+      gain.gain.setValueAtTime(vol, ac.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + dur);
+      osc.connect(gain); gain.connect(ac.destination);
+      osc.start(ac.currentTime + delay);
+      osc.stop(ac.currentTime + delay + dur + 0.05);
+    }
+    function noise(dur, vol=0.15, filterFreq=1200){
+      const ac = ensure();
+      const bufferSize = ac.sampleRate * dur;
+      const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      const src = ac.createBufferSource();
+      src.buffer = buffer;
+      const filter = ac.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = filterFreq;
+      const gain = ac.createGain();
+      gain.gain.setValueAtTime(vol, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+      src.connect(filter); filter.connect(gain); gain.connect(ac.destination);
+      src.start();
+    }
+    return {
+      init(){ ensure(); },
+      countdownBeep(){ tone(880, 0.12, 'square', 0.12); },
+      countdownGo(){ tone(1320, 0.2, 'square', 0.15); },
+      contact(tierIndex){
+        const pitch = 180 + tierIndex*60;
+        tone(pitch, 0.15, 'triangle', 0.3, 0, pitch*0.6);
+        noise(0.12, 0.1, 800 + tierIndex*200);
+      },
+      perfectZing(){
+        tone(1800, 0.4, 'sine', 0.15, 0, 2600);
+        tone(2600, 0.5, 'sine', 0.08, 0.05, 3400);
+      },
+      goal(){
+        tone(523, 0.5, 'sine', 0.18);
+        tone(659, 0.5, 'sine', 0.18, 0.08);
+        tone(784, 0.6, 'sine', 0.18, 0.16);
+        noise(0.9, 0.18, 2000);
+      },
+      saved(){
+        tone(300, 0.4, 'sawtooth', 0.15, 0, 120);
+        noise(0.5, 0.1, 400);
+      },
+      crowdSwell(){ noise(1.2, 0.12, 1500); }
+    };
+  })();
+
+  // ---------------- Utility ----------------
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+  function easeOutCubic(t){ return 1 - Math.pow(1-t,3); }
+  function easeInOutQuad(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  // ---------------- Game State ----------------
+  const TIERS = [
+    { key:'weak',    min:0,  max:20,  label:'TAP-IN',        shot:'Tap-in Header',  saveChance:0.85, points:0 },
+    { key:'low',     min:20, max:51,  label:'HEADER!',       shot:'Standard Header', saveChance:0.6,  points:1 },
+    { key:'mid',     min:51, max:80,  label:'POWER STRIKE!', shot:'Power Header / Volley', saveChance:0.4, points:2 },
+    { key:'high',    min:80, max:95,  label:'SCISSOR KICK!', shot:'Scissor Kick',   saveChance:0.25, points:3 },
+    { key:'perfect', min:95, max:100.001, label:'BICYCLE KICK!', shot:'Bicycle Kick', saveChance:0.05, points:5 }
+  ];
+  const RATINGS = ['Amateur','Semi-Pro','Professional','International','World Class','GOAT'];
+  const KIT_COLORS = ['#1c5fd1','#d11c2e','#1ca84a','#e8a93b','#7a1cd1','#161a20'];
+  const CROSS_TYPES = [
+    { label:'Whipped cross — left wing', side:'left', curve:'whip' },
+    { label:'Deep cross — right wing', side:'right', curve:'deep' },
+    { label:'Driven cross — left wing', side:'left', curve:'driven' },
+    { label:'Floated cross — right wing', side:'right', curve:'floated' },
+    { label:'Cutback — near post', side:'left', curve:'cutback' }
+  ];
+
+  const State = {
+    screen: 'start',
+    playerName: 'PLAYER',
+    kitColor: KIT_COLORS[0],
+    round: 0,
+    totalRounds: 5,
+    score: 0,
+    goals: 0,
+    shotHistory: [],
+    highScore: parseInt(localStorage.getItem('cf_highscore')||'0', 10),
+  };
+
+  // ---------------- Particle System ----------------
+  const ParticleSystem = {
+    particles: [],
+    spawn(x,y,count,opts){
+      opts = opts || {};
+      for(let i=0;i<count;i++){
+        const ang = rand(0, Math.PI*2);
+        const spd = rand(opts.minSpeed||40, opts.maxSpeed||180);
+        this.particles.push({
+          x,y,
+          vx: Math.cos(ang)*spd,
+          vy: Math.sin(ang)*spd - (opts.upBias||60),
+          life: rand(opts.minLife||0.3, opts.maxLife||0.8),
+          age:0,
+          size: rand(opts.minSize||1.5, opts.maxSize||4),
+          color: opts.color || '255,255,255'
+        });
+      }
+    },
+    update(dt){
+      for(let i=this.particles.length-1;i>=0;i--){
+        const p = this.particles[i];
+        p.age += dt;
+        if(p.age >= p.life){ this.particles.splice(i,1); continue; }
+        p.vy += 220*dt;
+        p.x += p.vx*dt;
+        p.y += p.vy*dt;
+      }
+    },
+    render(ctx){
+      for(const p of this.particles){
+        const t = 1 - p.age/p.life;
+        ctx.globalAlpha = t;
+        ctx.fillStyle = `rgba(${p.color},${t})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size*t+0.5, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    },
+    clear(){ this.particles.length = 0; }
+  };
+
+  // ---------------- Crowd ----------------
+  const Crowd = {
+    members: [],
+    init(){
+      this.members = [];
+      const rows = 3;
+      for(let r=0;r<rows;r++){
+        const y = 96 + r*14;
+        const count = 28;
+        for(let i=0;i<count;i++){
+          this.members.push({
+            x: (i/(count-1)) * LOGICAL_W,
+            y,
+            phase: rand(0, Math.PI*2),
+            speed: rand(2,4),
+            mood: 0 // -1 despair, 0 neutral, 1 hype
+          });
+        }
+      }
+    },
+    setMood(m){ for(const c of this.members) c.mood = m; },
+    update(dt, t){
+      for(const c of this.members) c.phase += dt*c.speed;
+    },
+    render(ctx, t){
+      for(const c of this.members){
+        const bob = Math.sin(c.phase) * (c.mood===1 ? 5 : 1.5);
+        const liftY = c.mood===1 ? -Math.abs(Math.sin(c.phase*2))*6 : 0;
+        ctx.fillStyle = c.mood===1 ? 'rgba(255,226,122,0.5)' : (c.mood===-1 ? 'rgba(80,40,40,0.55)' : 'rgba(20,24,30,0.6)');
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y + bob*0.2 + liftY, 4.5, 7, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  };
+
+  // ---------------- Field / Static Drawing ----------------
+  function drawStadiumBackground(t){
+    const g = ctx.createLinearGradient(0,0,0,260);
+    g.addColorStop(0, '#0d1726');
+    g.addColorStop(1, '#16314a');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,LOGICAL_W,260);
+
+    // stadium lighting
+    const lg = ctx.createRadialGradient(LOGICAL_W*0.5, -40, 40, LOGICAL_W*0.5, -40, 420);
+    lg.addColorStop(0, 'rgba(255,250,225,0.35)');
+    lg.addColorStop(1, 'rgba(255,250,225,0)');
+    ctx.fillStyle = lg;
+    ctx.fillRect(0,0,LOGICAL_W,300);
+
+    // stand silhouette
+    ctx.fillStyle = '#06090f';
+    ctx.beginPath();
+    ctx.moveTo(0,150);
+    ctx.lineTo(LOGICAL_W,150);
+    ctx.lineTo(LOGICAL_W,210);
+    ctx.lineTo(0,210);
+    ctx.closePath();
+    ctx.fill();
+
+    Crowd.render(ctx, t);
+
+    // pitch
+    const pg = ctx.createLinearGradient(0,210,0,LOGICAL_H);
+    pg.addColorStop(0,'#2f8f3f');
+    pg.addColorStop(1,'#1f6a2c');
+    ctx.fillStyle = pg;
+    ctx.fillRect(0,210,LOGICAL_W,LOGICAL_H-210);
+    // mow stripes
+    ctx.globalAlpha = 0.07;
+    for(let i=0;i<10;i++){
+      ctx.fillStyle = i%2===0 ? '#fff' : '#000';
+      ctx.fillRect(0, 210 + i*((LOGICAL_H-210)/10), LOGICAL_W, (LOGICAL_H-210)/10);
+    }
+    ctx.globalAlpha = 1;
+
+    drawGoal();
+  }
+
+  function drawGoal(){
+    const gx0 = LOGICAL_W*0.18, gx1 = LOGICAL_W*0.82;
+    const gy0 = 230, gy1 = 330;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(gx0, gy1); ctx.lineTo(gx0, gy0); ctx.lineTo(gx1, gy0); ctx.lineTo(gx1, gy1);
+    ctx.stroke();
+    // net
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    const cols = 10, rows2 = 6;
+    for(let i=0;i<=cols;i++){
+      const x = lerp(gx0,gx1,i/cols);
+      ctx.beginPath(); ctx.moveTo(x,gy0); ctx.lineTo(x,gy1); ctx.stroke();
+    }
+    for(let j=0;j<=rows2;j++){
+      const y = lerp(gy0,gy1,j/rows2);
+      ctx.beginPath(); ctx.moveTo(gx0,y); ctx.lineTo(gx1,y); ctx.stroke();
+    }
+    // box line
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(LOGICAL_W*0.08, gy1, LOGICAL_W*0.84, 90);
+  }
+
+  // ---------------- Stick Figure Drawing ----------------
+  function drawStickPlayer(x,y, scale, pose, kitColor){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(scale, scale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.fillStyle = kitColor;
+    ctx.lineWidth = 3.2;
+
+    const a = pose; // pose angles object
+    // shadow
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, a.groundY!==undefined ? a.groundY : 0, 16, 5, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    const hipY = a.hipY;
+    // legs
+    ctx.beginPath();
+    ctx.moveTo(0,hipY);
+    ctx.lineTo(a.leg1x, a.leg1y);
+    ctx.moveTo(0,hipY);
+    ctx.lineTo(a.leg2x, a.leg2y);
+    ctx.stroke();
+    // torso
+    ctx.beginPath();
+    ctx.moveTo(0,hipY);
+    ctx.lineTo(a.shoulderX, a.shoulderY);
+    ctx.stroke();
+    // jersey blob
+    ctx.beginPath();
+    ctx.ellipse((a.shoulderX)/2, (hipY+a.shoulderY)/2, 8, 12, Math.atan2(a.shoulderY-hipY, a.shoulderX-0), 0, Math.PI*2);
+    ctx.fill();
+    // arms
+    ctx.beginPath();
+    ctx.moveTo(a.shoulderX, a.shoulderY);
+    ctx.lineTo(a.arm1x, a.arm1y);
+    ctx.moveTo(a.shoulderX, a.shoulderY);
+    ctx.lineTo(a.arm2x, a.arm2y);
+    ctx.stroke();
+    // head
+    ctx.beginPath();
+    ctx.fillStyle = '#e8b894';
+    ctx.arc(a.headX, a.headY, 7, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function getPlayerPose(state, t){
+    // state: idle, approach, jump, contact, land + tier
+    const base = { hipY:0, leg1x:-8, leg1y:18, leg2x:8, leg2y:18, shoulderX:2, shoulderY:-22,
+      arm1x:-12, arm1y:-14, arm2x:14, arm2y:-14, headX:4, headY:-30, groundY:18 };
+    if(state.kind === 'idle'){
+      const bob = Math.sin(t*4)*1.5;
+      base.shoulderY = -22+bob; base.headY = -30+bob;
+      return base;
+    }
+    if(state.kind === 'approach'){
+      const cyc = Math.sin(t*10);
+      base.leg1x = -10*cyc; base.leg1y = 18 - Math.abs(cyc)*4;
+      base.leg2x = 10*cyc; base.leg2y = 18 - Math.abs(-cyc)*4;
+      base.arm1x = 10*cyc; base.arm2x = -10*cyc;
+      base.groundY = 18 - Math.abs(cyc)*3;
+      return base;
+    }
+    if(state.kind === 'jump'){
+      const p = state.progress; // 0..1
+      const h = Math.sin(p*Math.PI) * state.jumpHeight;
+      base.hipY = -h; base.shoulderY = -22-h; base.headY = -30-h;
+      base.leg1x = -14; base.leg1y = 10-h*0.3;
+      base.leg2x = 6; base.leg2y = 16-h*0.6;
+      base.groundY = 18;
+      if(state.tier === 'perfect' || state.tier === 'high'){
+        // legs swept high for bicycle/scissor
+        base.leg1x = -10 - p*10; base.leg1y = -8 - h*0.5;
+        base.leg2x = 18*p; base.leg2y = 4 - h*0.3;
+        base.arm1x = -16; base.arm1y = -2-h*0.4;
+        base.arm2x = 16; base.arm2y = -2-h*0.4;
+        base.shoulderY = -10-h*0.6; // leaning back
+        base.headY = base.shoulderY - 8;
+      }
+      return base;
+    }
+    if(state.kind === 'contact'){
+      const h = state.jumpHeight*0.7;
+      base.hipY = -h; base.shoulderY=-22-h; base.headY=-30-h;
+      if(state.tier === 'perfect'){
+        base.leg1x = 22; base.leg1y = -h*0.9; // kicking leg up & over
+        base.leg2x = -8; base.leg2y = 6-h*0.3;
+        base.shoulderX = -8; base.shoulderY = -6-h*0.5;
+        base.headY = base.shoulderY-8;
+      } else if(state.tier === 'high'){
+        base.leg1x = 20; base.leg1y = -2-h*0.4;
+        base.leg2x = -6; base.leg2y = 14-h*0.2;
+      } else {
+        base.headX = 8; base.headY = -32-h;
+      }
+      return base;
+    }
+    if(state.kind === 'land'){
+      const p = state.progress;
+      const h = state.jumpHeight*(1-p);
+      base.hipY = -h; base.shoulderY=-22-h; base.headY=-30-h;
+      return base;
+    }
+    return base;
+  }
+
+  // ---------------- Ball ----------------
+  function drawBall(x,y,r,spin){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(spin);
+    const g = ctx.createRadialGradient(-r*0.3,-r*0.3,1,0,0,r);
+    g.addColorStop(0,'#ffffff');
+    g.addColorStop(1,'#cfd2d6');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#333'; ctx.lineWidth = Math.max(1, r*0.12);
+    ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(r,0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(0,r); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,0,r*0.55,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBallShadow(x, groundY, scale){
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x, groundY, 14*scale, 4*scale, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------------- Goalkeeper ----------------
+  function drawGK(x,y,diveAngle, diveAmt, kitColor){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(diveAngle*diveAmt);
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle = '#111'; ctx.lineWidth=3.4;
+    ctx.fillStyle = kitColor;
+    // legs
+    ctx.beginPath();
+    ctx.moveTo(0,0); ctx.lineTo(-10,20); ctx.moveTo(0,0); ctx.lineTo(10,20);
+    ctx.stroke();
+    // torso
+    ctx.beginPath();
+    ctx.moveTo(0,0); ctx.lineTo(0,-24);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0,-12,9,13,0,0,Math.PI*2); ctx.fill();
+    // arms (raised more with dive)
+    const armSpread = 14 + diveAmt*14;
+    ctx.beginPath();
+    ctx.moveTo(0,-22); ctx.lineTo(-armSpread, -22-diveAmt*14);
+    ctx.moveTo(0,-22); ctx.lineTo(armSpread, -22-diveAmt*14);
+    ctx.stroke();
+    // head
+    ctx.beginPath();
+    ctx.fillStyle = '#e8b894';
+    ctx.arc(0,-32,7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------------- Main Game Controller ----------------
+  const GOAL_X0 = LOGICAL_W*0.18, GOAL_X1 = LOGICAL_W*0.82;
+  const GOAL_Y = 260;
+  const GK_HOME = { x: LOGICAL_W*0.5, y: 250 };
+
+  const Game = {
+    t:0,
+    phase: 'idle', // idle, countdown, crossing, charging, shooting, gkreact, result
+    timers: {},
+    cross: null,
+    ballPos: {x:0,y:0,z:0},
+    ballSpin:0,
+    charge: 0,
+    charging: false,
+    chargeDir: 1,
+    chargeSpeed: 50, // % per second (fills in 2s)
+    perfectZoneStart: 95,
+    playerKind:'idle',
+    playerAnim: { progress:0 },
+    slowMoFactor: 1,
+    slowMoTimer: 0,
+    shotResult: null,
+    trail: [],
+    crowdMoodTimer: 0,
+    lastTime: 0,
+
+    init(){
+      Crowd.init();
+      requestAnimationFrame(this.loop.bind(this));
+    },
+
+    startGame(){
+      State.round = 0;
+      State.score = 0;
+      State.goals = 0;
+      State.shotHistory = [];
+      this.nextRound();
+    },
+
+    nextRound(){
+      if(State.round >= State.totalRounds){
+        this.showScoreScreen();
+        return;
+      }
+      State.round++;
+      document.getElementById('hudRound').textContent = State.round + '/' + State.totalRounds;
+      document.getElementById('hudScore').textContent = State.score;
+      document.getElementById('hudPlayer').textContent = State.playerName;
+      showScreen('round');
+      this.cross = choice(CROSS_TYPES);
+      document.getElementById('crossLabel').textContent = this.cross.label;
+      this.runCountdown();
+    },
+
+    runCountdown(){
+      let n = 3;
+      const el = document.getElementById('countdownNum');
+      el.textContent = n;
+      AudioEngine.countdownBeep();
+      this.timers.countdown = setInterval(()=>{
+        n--;
+        if(n > 0){
+          el.textContent = n;
+          AudioEngine.countdownBeep();
+        } else {
+          clearInterval(this.timers.countdown);
+          el.textContent = 'GO!';
+          AudioEngine.countdownGo();
+          setTimeout(()=> this.beginCross(), 350);
+        }
+      }, 700);
+    },
+
+    beginCross(){
+      showScreen('game');
+      this.phase = 'crossing';
+      this.playerKind = 'approach';
+      this.crossT = 0;
+      this.crossDuration = rand(1.1, 1.5);
+      const side = this.cross.side;
+      this.crossStart = { x: side==='left' ? -10 : LOGICAL_W+10, y: 360, z:0 };
+      this.crossControl = { x: side==='left' ? LOGICAL_W*0.35 : LOGICAL_W*0.65, y: 230 };
+      this.crossEnd = { x: lerp(GOAL_X0+30, GOAL_X1-30, rand(0.35,0.65)), y: 470 };
+      this.playerPos = { x: this.crossEnd.x, y: 480 };
+      this.gkPos = { x: GK_HOME.x, y: GK_HOME.y, diveAmt:0, diveAngle:0 };
+      this.trail = [];
+      this.charge = 0;
+      this.chargeLocked = false;
+    },
+
+    onCrossArrived(){
+      this.phase = 'charging';
+      this.charging = false;
+      this.charge = 0;
+      document.getElementById('chargeWrap').classList.remove('hidden');
+      document.getElementById('touchCatcher').classList.remove('hidden');
+      document.getElementById('barLabel').textContent = 'HOLD TO CHARGE SHOT';
+    },
+
+    startCharge(){
+      if(this.phase !== 'charging' || this.chargeLocked) return;
+      this.charging = true;
+      AudioEngine.init();
+    },
+
+    releaseCharge(){
+      if(this.phase !== 'charging' || !this.charging) return;
+      this.charging = false;
+      this.chargeLocked = true;
+      this.resolveShot();
+    },
+
+    getTierForCharge(c){
+      for(const tier of TIERS){
+        if(c >= tier.min && c < tier.max) return tier;
+      }
+      return TIERS[TIERS.length-1];
+    },
+
+    resolveShot(){
+      const tier = this.getTierForCharge(this.charge);
+      this.shotTier = tier;
+      document.getElementById('chargeWrap').classList.add('hidden');
+      document.getElementById('touchCatcher').classList.add('hidden');
+
+      const tierIndex = TIERS.indexOf(tier);
+      AudioEngine.contact(tierIndex);
+      if(tier.key === 'perfect') AudioEngine.perfectZing();
+
+      // particle burst at contact point
+      ParticleSystem.spawn(this.playerPos.x, this.playerPos.y-40, 16 + tierIndex*6, {
+        color: tier.key==='perfect' ? '255,226,122' : '255,255,255',
+        minSpeed:60, maxSpeed: 140+tierIndex*40, upBias: 80
+      });
+
+      this.phase = 'jump';
+      this.playerKind = 'jump';
+      this.jumpStart = this.t;
+      this.jumpDuration = tier.key==='perfect' ? 0.9 : (tier.key==='high' ? 0.7 : 0.55);
+      this.jumpHeight = 20 + tierIndex*14;
+
+      // determine shot placement
+      const placementX = lerp(GOAL_X0+14, GOAL_X1-14, clamp(rand(0.1,0.9) + (this.charge/100-0.5)*0.3, 0,1));
+      const placementY = GOAL_Y + rand(0,10);
+      this.shotPlacement = { x: placementX, y: placementY };
+
+      // trigger slow-mo on high/perfect tiers
+      if(tier.key === 'high' || tier.key === 'perfect'){
+        this.slowMoFactor = 0.25;
+        this.slowMoTimer = 0.8;
+      }
+
+      // tier callout
+      const callout = document.getElementById('tierCallout');
+      callout.textContent = tier.label;
+      callout.style.opacity = '1';
+      setTimeout(()=>{ callout.style.opacity = '0'; }, 1100);
+
+      if(tier.key === 'perfect'){
+        flashScreen();
+      }
+
+      // schedule GK reaction & ball flight after the kick animation windup
+      this.shotLaunchDelay = this.jumpDuration * 0.55;
+    },
+
+    launchShot(){
+      this.phase = 'shooting';
+      this.ballFlightT = 0;
+      this.ballFlightDuration = 0.55;
+      this.ballFlightStart = { x: this.playerPos.x, y: this.playerPos.y-50 };
+
+      const tier = this.shotTier;
+      const saveRoll = Math.random();
+      const saved = saveRoll < tier.saveChance;
+      this.shotSaved = saved;
+
+      // GK dive direction based on placement, "wrong footed" on perfect tier
+      let diveDir = this.shotPlacement.x < GK_HOME.x ? -1 : 1;
+      if(tier.key === 'perfect' && Math.random() < 0.7) diveDir *= -1; // wrong-footed
+      this.gkDiveDir = diveDir;
+      this.gkSaved = saved;
+    },
+
+    completeShot(){
+      this.phase = 'result';
+      const tier = this.shotTier;
+      const saved = this.shotSaved;
+      let pts = saved ? 0 : tier.points;
+      State.score += pts;
+      if(!saved) State.goals++;
+      State.shotHistory.push({ tier: tier.key, label: tier.shot, saved, points: pts });
+
+      document.getElementById('hudScore').textContent = State.score;
+
+      if(saved){
+        AudioEngine.saved();
+        Crowd.setMood(-1);
+        ParticleSystem.spawn(this.shotPlacement.x, this.shotPlacement.y, 10, { color:'200,200,200', maxSpeed:80 });
+      } else {
+        AudioEngine.goal();
+        AudioEngine.crowdSwell();
+        Crowd.setMood(1);
+        ParticleSystem.spawn(this.shotPlacement.x, this.shotPlacement.y, 30, { color:'255,226,122', maxSpeed:200, upBias:120 });
+      }
+
+      const big = document.getElementById('resultBig');
+      const small = document.getElementById('resultSmall');
+      big.textContent = saved ? 'SAVED!' : 'GOAL!';
+      big.style.color = saved ? '#e25b3a' : '#ffe27a';
+      small.textContent = tier.shot + (saved ? ' — Keeper got there' : ' — ' + pts + ' pts!');
+      document.getElementById('resultBox').classList.add('show');
+
+      setTimeout(()=>{
+        document.getElementById('resultBox').classList.remove('show');
+        Crowd.setMood(0);
+        if(State.round >= State.totalRounds){
+          this.showScoreScreen();
+        } else {
+          this.nextRound();
+        }
+      }, 1800);
+    },
+
+    showScoreScreen(){
+      showScreen('score');
+      if(State.score > State.highScore){
+        State.highScore = State.score;
+        localStorage.setItem('cf_highscore', String(State.highScore));
+      }
+      document.getElementById('finalScore').textContent = State.score;
+      document.getElementById('finalGoals').textContent = State.goals + '/' + State.totalRounds;
+      const tierRank = {weak:0,low:1,mid:2,high:3,perfect:4};
+      let best = null;
+      for(const s of State.shotHistory){
+        if(!s.saved && (best===null || tierRank[s.tier] > tierRank[best.tier])) best = s;
+      }
+      document.getElementById('finalBest').textContent = best ? best.label : 'None';
+      document.getElementById('finalHigh').textContent = State.highScore;
+
+      const avgTierIdx = State.shotHistory.reduce((acc,s)=> acc + tierRank[s.tier], 0) / Math.max(1,State.shotHistory.length);
+      const goalRate = State.goals / State.totalRounds;
+      let ratingIdx = Math.round(((avgTierIdx/4)*0.5 + goalRate*0.5) * (RATINGS.length-1));
+      ratingIdx = clamp(ratingIdx, 0, RATINGS.length-1);
+      document.getElementById('ratingTag').textContent = RATINGS[ratingIdx].toUpperCase();
+    },
+
+    // ---------------- Update Loop ----------------
+    loop(now){
+      if(!this.lastTime) this.lastTime = now;
+      let dt = (now - this.lastTime) / 1000;
+      this.lastTime = now;
+      dt = Math.min(dt, 0.05);
+
+      if(this.slowMoTimer > 0){
+        this.slowMoTimer -= dt;
+        if(this.slowMoTimer <= 0) this.slowMoFactor = 1;
+      }
+      const simDt = dt * this.slowMoFactor;
+      this.t += simDt;
+
+      this.update(simDt, dt);
+      this.render();
+
+      requestAnimationFrame(this.loop.bind(this));
+    },
+
+    update(dt, realDt){
+      Crowd.update(dt, this.t);
+      ParticleSystem.update(dt);
+
+      if(this.phase === 'crossing'){
+        this.crossT += realDt / this.crossDuration;
+        if(this.crossT >= 1){
+          this.crossT = 1;
+          this.onCrossArrived();
+        }
+        const tt = easeInOutQuad(this.crossT);
+        const p0=this.crossStart, p1=this.crossControl, p2=this.crossEnd;
+        const x = (1-tt)*(1-tt)*p0.x + 2*(1-tt)*tt*p1.x + tt*tt*p2.x;
+        const y = (1-tt)*(1-tt)*p0.y + 2*(1-tt)*tt*p1.y + tt*tt*p2.y;
+        const z = Math.sin(tt*Math.PI) * 70; // height arc
+        this.ballPos = {x,y,z};
+        this.ballSpin = this.t * 14;
+        this.trail.push({x,y:y-z});
+        if(this.trail.length > 10) this.trail.shift();
+      } else if(this.phase === 'charging'){
+        if(this.charging){
+          this.charge += this.chargeSpeed * realDt;
+          if(this.charge >= 100){
+            this.charge = 100;
+            this.releaseCharge();
+          }
+        }
+      } else if(this.phase === 'jump'){
+        const p = clamp((this.t - this.jumpStart) / this.jumpDuration, 0, 1);
+        this.playerAnim.progress = p;
+        if(p >= this.shotLaunchDelay / this.jumpDuration && !this.launched){
+          this.launched = true;
+          this.launchShot();
+        }
+        if(p >= 1){
+          this.phase = 'landing';
+          this.landStart = this.t;
+        }
+      } else if(this.phase === 'shooting'){
+        this.ballFlightT += realDt / this.ballFlightDuration;
+        if(this.ballFlightT >= 1){
+          this.ballFlightT = 1;
+        }
+        const tt = easeOutCubic(this.ballFlightT);
+        const sx = this.ballFlightStart.x, sy = this.ballFlightStart.y;
+        const ex = this.shotPlacement.x, ey = this.shotPlacement.y;
+        const arcH = 50;
+        this.ballPos = {
+          x: lerp(sx, ex, tt),
+          y: lerp(sy, ey, tt) - Math.sin(tt*Math.PI)*arcH,
+          z:0
+        };
+        this.ballSpin += realDt*30;
+        this.trail.push({x:this.ballPos.x, y:this.ballPos.y});
+        if(this.trail.length > 8) this.trail.shift();
+
+        // GK dive progresses alongside ball flight
+        const diveP = clamp(this.ballFlightT*1.3, 0, 1);
+        this.gkPos.diveAmt = easeOutCubic(diveP) * (this.gkSaved ? 1 : 0.6);
+        this.gkPos.diveAngle = this.gkDiveDir * Math.PI/2.2;
+
+        if(this.ballFlightT >= 1 && !this.shotComplete){
+          this.shotComplete = true;
+          setTimeout(()=> this.completeShot(), 150);
+        }
+      } else if(this.phase === 'landing'){
+        const p = clamp((this.t - this.landStart)/0.3, 0,1);
+        this.landProgress = p;
+      } else if(this.phase === 'result'){
+        // handled by timeouts
+      }
+    },
+
+    render(){
+      ctx.clearRect(0,0,LOGICAL_W,LOGICAL_H);
+      drawStadiumBackground(this.t);
+
+      if(['crossing','charging','jump','shooting','landing','result'].includes(this.phase)){
+        // ball trail (motion blur)
+        for(let i=0;i<this.trail.length;i++){
+          const pt = this.trail[i];
+          ctx.globalAlpha = (i/this.trail.length) * 0.35;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 6, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // player
+      if(['crossing','charging','jump','shooting','landing'].includes(this.phase) && this.playerPos){
+        let pose, kind;
+        if(this.phase === 'crossing'){
+          kind = { kind:'approach' };
+        } else if(this.phase === 'charging'){
+          kind = { kind:'idle' };
+        } else if(this.phase === 'jump'){
+          const isContact = this.playerAnim.progress >= (this.shotLaunchDelay/this.jumpDuration) - 0.05 &&
+                             this.playerAnim.progress <= (this.shotLaunchDelay/this.jumpDuration) + 0.15;
+          kind = isContact
+            ? { kind:'contact', tier: this.shotTier.key, jumpHeight: this.jumpHeight }
+            : { kind:'jump', progress: this.playerAnim.progress, tier: this.shotTier.key, jumpHeight: this.jumpHeight };
+        } else if(this.phase === 'shooting'){
+          kind = { kind:'contact', tier: this.shotTier.key, jumpHeight: this.jumpHeight };
+        } else if(this.phase === 'landing'){
+          kind = { kind:'land', progress: this.landProgress, jumpHeight: this.jumpHeight };
+        }
+        pose = getPlayerPose(kind, this.t);
+        drawStickPlayer(this.playerPos.x, this.playerPos.y, 1.3, pose, State.kitColor);
+      }
+
+      // GK
+      if(this.phase !== 'crossing' && this.phase !== 'idle'){
+        const gk = this.gkPos || { x: GK_HOME.x, y: GK_HOME.y, diveAmt:0, diveAngle:0 };
+        drawGK(gk.x, gk.y, gk.diveAngle, gk.diveAmt, '#222');
+      }
+
+      // ball
+      if(this.phase === 'crossing'){
+        drawBallShadow(this.ballPos.x, 470, 1 - this.ballPos.z/140);
+        drawBall(this.ballPos.x, this.ballPos.y - this.ballPos.z, 7, this.ballSpin);
+      } else if(['shooting'].includes(this.phase)){
+        drawBall(this.ballPos.x, this.ballPos.y, 7, this.ballSpin);
+      } else if(this.phase === 'charging' && this.playerPos){
+        drawBall(this.playerPos.x, this.playerPos.y - 36, 7, this.t*6);
+      }
+
+      ParticleSystem.render(ctx);
+
+      // perfect-zone shake on charge bar handled via DOM class
+    }
+  };
+
+  // ---------------- Screen Management ----------------
+  function showScreen(name){
+    State.screen = name;
+    document.getElementById('screenStart').classList.toggle('hidden', name!=='start');
+    document.getElementById('screenRound').classList.toggle('hidden', name!=='round');
+    document.getElementById('screenScore').classList.toggle('hidden', name!=='score');
+    document.getElementById('hud').classList.toggle('hidden', !(name==='game'||name==='round'));
+    if(name !== 'game'){
+      document.getElementById('chargeWrap').classList.add('hidden');
+      document.getElementById('touchCatcher').classList.add('hidden');
+    }
+  }
+
+  function flashScreen(){
+    const f = document.getElementById('flash');
+    f.style.opacity = '0.85';
+    setTimeout(()=>{ f.style.opacity = '0'; }, 90);
+  }
+
+  // ---------------- Charge Bar Visual Update ----------------
+  function updateChargeBarVisual(){
+    const fill = document.getElementById('barFill');
+    const track = document.getElementById('barTrack');
+    fill.style.width = Game.charge + '%';
+    if(Game.charge >= Game.perfectZoneStart){
+      track.classList.add('shake');
+    } else {
+      track.classList.remove('shake');
+    }
+    requestAnimationFrame(updateChargeBarVisual);
+  }
+  requestAnimationFrame(updateChargeBarVisual);
+
+  // ---------------- Input Wiring ----------------
+  const kitRow = document.getElementById('kitRow');
+  KIT_COLORS.forEach((c, i)=>{
+    const sw = document.createElement('div');
+    sw.className = 'kit-swatch' + (i===0 ? ' selected' : '');
+    sw.style.background = c;
+    sw.addEventListener('click', ()=>{
+      [...kitRow.children].forEach(ch=>ch.classList.remove('selected'));
+      sw.classList.add('selected');
+      State.kitColor = c;
+    });
+    kitRow.appendChild(sw);
+  });
+
+  document.getElementById('kickOffBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('nameInput').value.trim();
+    State.playerName = name ? name.toUpperCase().slice(0,14) : 'PLAYER';
+    AudioEngine.init();
+    Game.startGame();
+  });
+
+  document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+    showScreen('start');
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', ()=>{
+    try{
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = 'cross-and-finish-score.png';
+      a.click();
+    }catch(e){
+      alert('Score: ' + State.score + ' (' + State.goals + '/' + State.totalRounds + ' goals)');
+    }
+  });
+
+  const touchCatcher = document.getElementById('touchCatcher');
+  function onDown(e){ e.preventDefault(); Game.startCharge(); }
+  function onUp(e){ e.preventDefault(); Game.releaseCharge(); }
+  touchCatcher.addEventListener('touchstart', onDown, { passive:false });
+  touchCatcher.addEventListener('touchend', onUp, { passive:false });
+  touchCatcher.addEventListener('touchcancel', onUp, { passive:false });
+  touchCatcher.addEventListener('mousedown', onDown);
+  touchCatcher.addEventListener('mouseup', onUp);
+
+  document.addEventListener('touchmove', function(e){
+    if(State.screen === 'game') e.preventDefault();
+  }, { passive:false });
+
+  document.addEventListener('contextmenu', e=> e.preventDefault());
+
+  // ---------------- Boot ----------------
+  showScreen('start');
+  Game.init();
+
+})();
+</script>
+</body>
+</html>
